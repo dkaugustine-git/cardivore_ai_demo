@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cardivore_ai"
+version = "0.1.0"
+description = "A Pokémon card ROI analysis and sourcing toolkit using eBay and Market Movers data."
+authors = [
+  { name = "Derek Augustine", email = "YOUR_EMAIL@example.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.3",
+  "numpy>=2.2",
+  "SQLAlchemy>=2.0",
+  "mysql-connector-python>=9.0",
+  "python-dotenv>=1.0",
+  "ipykernel>=7.0",
+  "notebook>=7.0",
+  "ipywidgets>=8.1",
+  "matplotlib>=3.8",
+  "tqdm>=4.60",
+  "rich>=13.0",
+  "requests>=2.31",
+  "openpyxl>=3.1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "jupyterlab",
+  "black",
+  "flake8"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cardivore_ai", "cardivore_ai.*"]
+exclude = ["data*", "mysql*", "notebooks*", "tests*"]
+

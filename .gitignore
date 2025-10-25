@@ -1,0 +1,66 @@
+# -----------------------------------------------------------------------------
+# 🧠 Cardivore AI .gitignore
+# -----------------------------------------------------------------------------
+
+# --- Python cache & virtual environments ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+venv/
+.env
+*.env
+
+# --- Jupyter & VSCode ---
+.ipynb_checkpoints/
+.vscode/
+*.code-workspace
+
+# --- Logs, temp, misc ---
+*.log
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+Thumbs.db
+
+# --- Local Docker data ---
+docker_data/
+*.pid
+*.sock
+
+# --- Compiled or packaged artifacts ---
+build/
+dist/
+*.egg-info/
+
+# --- Data folders ---
+# Ignore all future data by default...
+data/**
+
+# ...but keep current demo CSVs tracked!
+!data/
+!data/raw/
+!data/raw/raw_historic_sales.csv
+!data/raw/psa10_historic_sales.csv
+
+# --- SQLite or other local DB dumps (if ever used) ---
+*.sqlite
+*.db
+*.sql
+
+# --- Security ---
+*.pem
+*.key
+*.crt
+secrets.json
+
+# --- OS / IDE trash ---
+.idea/
+*.iml
+.DS_Store
+
+# --- Local database volumes (persistent data) ---
+mysql/data/
+
