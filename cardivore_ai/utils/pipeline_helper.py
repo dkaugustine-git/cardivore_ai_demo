@@ -2,11 +2,14 @@
 import pandas as pd
 import re
 from sqlalchemy import create_engine
-from cardivore_ai.utils.db_utils import get_engine_from_env
+from cardivore_ai.utils.db_utils import get_engine_from_env, get_engine
 from cardivore_ai.utils.io_utils import normalize_column_headers
 from cardivore_ai.utils.cards import build_search_string
 import re
 from urllib.parse import quote_plus
+import os
+from sqlalchemy.exc import OperationalError
+from cardivore_ai.utils.db_utils import get_engine
 
 def build_search_string(card_name: str) -> tuple[str, bool]:
     """
@@ -88,12 +91,12 @@ def build_ebay_search_url(card_name: str) -> str:
     return f"{base_url}?{query}"
 
 # --- Extraction ---
-def load_sales_tables():
-    """Load raw and PSA10 sales tables from MySQL into DataFrames."""
-    engine = get_engine_from_env()
-    raw = pd.read_sql("SELECT * FROM raw_historic_sales", engine)
-    psa10 = pd.read_sql("SELECT * FROM psa10_historic_sales", engine)
-    return raw, psa10, engine
+def load_sales_tables(demo_mode=False):
+    engine = get_engine(demo_mode=demo_mode)
+    raw_df = pd.read_sql("SELECT * FROM psa10_raw_sales", engine)
+    psa_df = pd.read_sql("SELECT * FROM psa10_historic_sales", engine)
+    return raw_df, psa_df, engine
+
 
 
 # --- Transformation helpers ---
@@ -120,31 +123,34 @@ def summarize_sales(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
 
 # --- Main pipeline ---
 def build_card_summary():
-    """Full pipeline to build and return the merged card summary DataFrame."""
-    raw_df, psa_df, engine = load_sales_tables()
+    """Full pipeline to build and return the merged card summary DataFrame (demo)."""
+    from cardivore_ai.utils.pipeline_helper import (
+        load_sales_tables,
+        normalize_column_headers,
+        add_common_card_name,
+        summarize_sales,
+        build_search_string,
+        build_ebay_search_url,
+    )
 
-    # Normalize columns
+    raw_df, psa_df, engine = load_sales_tables(demo_mode=True)
+
     raw_df = normalize_column_headers(raw_df)
     psa_df = normalize_column_headers(psa_df)
 
-    # Add common names
     raw_df = add_common_card_name(raw_df, trim_right=20)
     psa_df = add_common_card_name(psa_df, trim_right=7)
 
-    # Summarize
     raw_summary = summarize_sales(raw_df, "raw")
     psa_summary = summarize_sales(psa_df, "psa10")
 
-    # Merge
     summary = pd.merge(raw_summary, psa_summary, on="common_card_name", how="inner")
 
-    # Add search strings
     summary[["search_string", "is_japanese"]] = summary["common_card_name"].apply(
         lambda x: pd.Series(build_search_string(x))
     )
     summary["ebay_url"] = summary["search_string"].apply(build_ebay_search_url)
-    
-    # --- ROI Calculation ---
+
     summary["effective_psa10_value"] = summary["psa10_avg"] * 0.85
     summary["cost_basis"] = summary["raw_avg"] + 25
     summary["roi_multiple"] = summary["effective_psa10_value"] / summary["cost_basis"]
@@ -155,23 +161,66 @@ def build_card_summary():
 # --- Retrieval helper ---
 def get_summary_df():
     """
-    Load the card summary DataFrame from MySQL.
-
+    Load the card summary DataFrame from the SQLite demo DB.
     If the table 'card_summary' doesn't exist yet, it will build it
     using the current pipeline and return that fresh DataFrame.
     """
-    from sqlalchemy.exc import ProgrammingError
-
-    engine = get_engine_from_env()
+    engine = get_engine(demo_mode=True)
     try:
-        # Try to load existing table
         summary_df = pd.read_sql("SELECT * FROM card_summary", engine)
-        print("✅ Loaded existing summary table from DB.")
-    except ProgrammingError:
-        # Build pipeline if table doesn't exist
+        print("✅ Loaded existing summary table from SQLite.")
+    except OperationalError:
         print("⚠️ Summary table not found — running build_card_summary()...")
         summary_df, engine = build_card_summary()
         summary_df.to_sql("card_summary", engine, if_exists="replace", index=False)
-        print("✅ Created and saved summary table to DB.")
+        print("✅ Created and saved summary table to SQLite.")
 
     return summary_df, engine
+
+def build_raw_tables():
+    engine = get_engine()
+    psa10_historic_sales = pd.read_csv("cardivore_ai/data/raw/psa10_historic_sales.csv")
+    psa10_raw_sales = pd.read_csv("cardivore_ai/data/raw/psa10_raw_sales.csv")
+
+    psa10_historic_sales.to_sql("psa10_historic_sales", con=engine, if_exists="replace", index=False)
+    psa10_raw_sales.to_sql("psa10_raw_sales", con=engine, if_exists="replace", index=False)
+
+    print("✅ Raw tables created: psa10_historic_sales, psa10_raw_sales")
+
+
+def build_all_tables(data_path, historic_file, raw_file):
+    """
+    Build or rebuild demo tables:
+      - psa10_historic_sales
+      - psa10_raw_sales
+      - card_summary
+    Always overwrites existing tables.
+    """
+    engine = get_engine()
+
+    historic_path = os.path.join(data_path, historic_file)
+    raw_path = os.path.join(data_path, raw_file)
+    print(f"📂 Loading raw files from:\n  {historic_path}\n  {raw_path}")
+
+    psa10_historic_sales = pd.read_csv(historic_path)
+    psa10_raw_sales = pd.read_csv(raw_path)
+
+    psa10_historic_sales.to_sql("psa10_historic_sales", con=engine, if_exists="replace", index=False)
+    psa10_raw_sales.to_sql("psa10_raw_sales", con=engine, if_exists="replace", index=False)
+    print("✅ Raw tables created or refreshed.")
+
+    query = """
+    SELECT 
+        p10.card_name,
+        AVG(p10.price) AS psa10_avg,
+        AVG(raw.price) AS raw_avg,
+        (AVG(p10.price) / AVG(raw.price) - 1) * 100 AS roi
+    FROM psa10_historic_sales p10
+    JOIN psa10_raw_sales raw
+        ON p10.card_name = raw.card_name
+    GROUP BY p10.card_name
+    """
+    summary_df = pd.read_sql(query, engine)
+    summary_df.to_sql("card_summary", con=engine, if_exists="replace", index=False)
+    print("✅ card_summary table created or refreshed.")
+    return summary_df

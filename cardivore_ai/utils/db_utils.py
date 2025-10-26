@@ -132,3 +132,31 @@ def create_or_replace_view(engine, view_name: str, select_sql: str):
         conn.execute(text(ddl))
         conn.commit()
 
+
+def get_engine(demo_mode=True):
+    """
+    Returns a SQLAlchemy engine.
+    - demo_mode=True: uses SQLite for the demo
+    - demo_mode=False: reads MySQL credentials from .env
+    """
+    if demo_mode:
+        # --- FIXED PATH ---
+        # Base project root (two levels above utils/)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        db_path = os.path.join(project_root, "data", "database", "card_demo.db")
+
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        print(f"📦 Using SQLite database at: {db_path}")
+
+        engine = create_engine(f"sqlite:///{db_path}")
+    else:
+        load_dotenv()
+        host = os.getenv("MYSQL_HOST", "localhost")
+        port = os.getenv("MYSQL_PORT", "3306")
+        user = os.getenv("MYSQL_USER", "root")
+        password = os.getenv("MYSQL_PASSWORD", "")
+        database = os.getenv("MYSQL_DATABASE", "cardivore_ai")
+        url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+        engine = create_engine(url)
+
+    return engine
