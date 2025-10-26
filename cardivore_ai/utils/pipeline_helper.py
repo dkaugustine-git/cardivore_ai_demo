@@ -145,7 +145,8 @@ def build_card_summary():
     psa_summary = summarize_sales(psa_df, "psa10")
 
     summary = pd.merge(raw_summary, psa_summary, on="common_card_name", how="inner")
-
+    summary = drop_common_numbered_cards(summary)
+    
     summary[["search_string", "is_japanese"]] = summary["common_card_name"].apply(
         lambda x: pd.Series(build_search_string(x))
     )
@@ -224,3 +225,24 @@ def build_all_tables(data_path, historic_file, raw_file):
     summary_df.to_sql("card_summary", con=engine, if_exists="replace", index=False)
     print("✅ card_summary table created or refreshed.")
     return summary_df
+
+def drop_common_numbered_cards(df):
+    """
+    Drops cards where the card_number looks like nnn/nnn
+    and the first number < the second (i.e., normal set cards).
+
+    These are typically low-value commons unless they're special stamped promos.
+    """
+    def is_common_number(card_name):
+        # Look for patterns like 045/172
+        match = re.search(r'(\d{1,3})/(\d{1,3})', card_name)
+        if match:
+            first, second = int(match.group(1)), int(match.group(2))
+            return first < second
+        return False
+
+    filtered_df = df[~df['common_card_name'].apply(is_common_number)]
+    dropped = len(df) - len(filtered_df)
+    if dropped > 0:
+        print(f"🧹 Dropped {dropped} common set cards (nnn/nnn pattern).")
+    return filtered_df
