@@ -93,7 +93,7 @@ def build_ebay_search_url(card_name: str) -> str:
 # --- Extraction ---
 def load_sales_tables(demo_mode=False):
     engine = get_engine(demo_mode=demo_mode)
-    raw_df = pd.read_sql("SELECT * FROM psa10_raw_sales", engine)
+    raw_df = pd.read_sql("SELECT * FROM raw_historic_sales", engine)
     psa_df = pd.read_sql("SELECT * FROM psa10_historic_sales", engine)
     return raw_df, psa_df, engine
 
@@ -180,19 +180,19 @@ def get_summary_df():
 def build_raw_tables():
     engine = get_engine()
     psa10_historic_sales = pd.read_csv("cardivore_ai/data/raw/psa10_historic_sales.csv")
-    psa10_raw_sales = pd.read_csv("cardivore_ai/data/raw/psa10_raw_sales.csv")
+    raw_historic_sales = pd.read_csv("cardivore_ai/data/raw/raw_historic_sales.csv")
 
     psa10_historic_sales.to_sql("psa10_historic_sales", con=engine, if_exists="replace", index=False)
-    psa10_raw_sales.to_sql("psa10_raw_sales", con=engine, if_exists="replace", index=False)
+    raw_historic_sales.to_sql("raw_historic_sales", con=engine, if_exists="replace", index=False)
 
-    print("✅ Raw tables created: psa10_historic_sales, psa10_raw_sales")
+    print("✅ Raw tables created: psa10_historic_sales, raw_historic_sales")
 
 
 def build_all_tables(data_path, historic_file, raw_file):
     """
     Build or rebuild demo tables:
       - psa10_historic_sales
-      - psa10_raw_sales
+      - raw_historic_sales
       - card_summary
     Always overwrites existing tables.
     """
@@ -203,10 +203,10 @@ def build_all_tables(data_path, historic_file, raw_file):
     print(f"📂 Loading raw files from:\n  {historic_path}\n  {raw_path}")
 
     psa10_historic_sales = pd.read_csv(historic_path)
-    psa10_raw_sales = pd.read_csv(raw_path)
+    raw_historic_sales = pd.read_csv(raw_path)
 
     psa10_historic_sales.to_sql("psa10_historic_sales", con=engine, if_exists="replace", index=False)
-    psa10_raw_sales.to_sql("psa10_raw_sales", con=engine, if_exists="replace", index=False)
+    raw_historic_sales.to_sql("raw_historic_sales", con=engine, if_exists="replace", index=False)
     print("✅ Raw tables created or refreshed.")
 
     query = """
@@ -216,7 +216,7 @@ def build_all_tables(data_path, historic_file, raw_file):
         AVG(raw.price) AS raw_avg,
         (AVG(p10.price) / AVG(raw.price) - 1) * 100 AS roi
     FROM psa10_historic_sales p10
-    JOIN psa10_raw_sales raw
+    JOIN raw_historic_sales raw
         ON p10.card_name = raw.card_name
     GROUP BY p10.card_name
     """
